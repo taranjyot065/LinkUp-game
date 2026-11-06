@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LinkUp — Word Chain Puzzle</title>
+<meta name="description" content="Every two neighbouring words form a common phrase. Beat the clock and finish the chain!">
+<style>
+:root{--bg:#14161c;--card:#1d2029;--line:#2c3040;--text:#eef0f6;--dim:#8b90a3;--acc:#7c5cff;--ok:#2ecc8f;--bad:#ff5c72;--warn:#ffb54a}
+@media (prefers-color-scheme: light){:root{--bg:#f3f4f9;--card:#fff;--line:#dcdfeb;--text:#1b1e2b;--dim:#6b7088}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh;display:flex;justify-content:center;padding:20px 14px}
+.app{width:100%;max-width:520px}
+h1{margin:0;font-size:28px;letter-spacing:-.5px}h1 span{color:var(--acc)}
+.sub{color:var(--dim);margin:6px 0 18px;line-height:1.45}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px}
+.timer{font-variant-numeric:tabular-nums;font-size:30px;font-weight:700}
+.pill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--dim)}
+.pill b{color:var(--text)}
+.chain{display:flex;flex-direction:column;align-items:center;gap:4px}
+.tile{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;gap:6px;justify-content:center;min-height:56px;align-items:center}
+.tile.solved{border-color:var(--ok);color:var(--ok);font-weight:700;letter-spacing:3px;font-size:20px}
+.tile.start{border-color:var(--acc);color:var(--acc);font-weight:700;letter-spacing:3px;font-size:20px}
+.tile.locked{opacity:.55}
+.tile.active{border-color:var(--acc);box-shadow:0 0 0 3px #7c5cff33}
+.tile.shake{animation:sh .35s}
+@keyframes sh{20%,60%{transform:translateX(-7px)}40%,80%{transform:translateX(7px)}}
+.box{width:34px;height:42px;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;font-weight:800;font-size:20px;text-transform:uppercase}
+.box.fixed{border-color:var(--acc);color:var(--acc);background:#7c5cff18}
+.box.on{border-color:var(--text)}
+.arrow{color:var(--dim);font-size:14px;line-height:1}
+input#g{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
+.row{display:flex;gap:10px;margin-top:16px}
+button{flex:1;border:0;border-radius:12px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;background:var(--card);color:var(--text);border:1px solid var(--line)}
+button.main{background:var(--acc);border-color:var(--acc);color:#fff}
+button:disabled{opacity:.45;cursor:not-allowed}
+button small{font-weight:500;color:var(--dim)}button.main small{color:#e5deff}
+.msg{min-height:22px;text-align:center;margin-top:12px;font-size:14px;color:var(--dim)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;text-align:center}
+.lvls{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
+.lvls button.sel{border-color:var(--acc);background:#7c5cff22}
+.big{font-size:44px;font-weight:800;margin:6px 0}
+.hide{display:none}
+.recap{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:12px 0;color:var(--dim);font-weight:700}
+.recap span:not(.ar){color:var(--text)}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Link<span>Up</span></h1>
+  <p class="sub">Every two neighbouring words make a common phrase: <b>TIME → MACHINE → GUN</b>. You see the first letter — type the whole word.</p>
+
+  <div id="menu" class="card">
+    <div>Choose chain length</div>
+    <div class="lvls">
+      <button data-n="4">Easy<br><small>4 words</small></button>
+      <button data-n="6" class="sel">Medium<br><small>6 words</small></button>
+      <button data-n="9">Hard<br><small>9 words</small></button>
+    </div>
+    <button class="main" id="start">Start</button>
+    <p class="sub" style="margin:14px 0 0;font-size:13px">Hint reveals one more letter (+5s). Skip a word for +20s. Best time is saved on this device.</p>
+    <p class="sub" id="best" style="margin:6px 0 0;font-size:13px"></p>
+  </div>
+
+  <div id="game" class="hide">
+    <div class="bar">
+      <div class="timer" id="time">0:00.0</div>
+      <div><span class="pill">Word <b id="prog">1/5</b></span> <span class="pill">Hints <b id="hc">0</b></span></div>
+    </div>
+    <div class="chain" id="chain"></div>
+    <input id="g" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Your guess">
+    <div class="msg" id="msg"></div>
+    <div class="row">
+      <button id="hint">💡 Hint <small>+5s</small></button>
+      <button id="skip">⏭ Skip <small>+20s</small></button>
+    </div>
+    <div class="row"><button id="quit">Quit</button></div>
+  </div>
+
+  <div id="end" class="card hide">
+    <div>Chain complete!</div>
+    <div class="big" id="final">0:00.0</div>
+    <div id="detail" class="sub"></div>
+    <div class="recap" id="recap"></div>
+    <div class="row"><button id="again" class="main">Play again</button><button id="home">Menu</button></div>
+  </div>
+</div>
+
+<script>
+// phrase bank: word > words that can follow it
+const BANK=`time>machine,zone,line,table,bomb|machine>gun,learning,code|gun>powder,shot,fire,man,point
+powder>room,keg,puff|room>service,mate,key,temperature|service>charge,station,dog,desk|charge>card,sheet
+card>board,game,shark,trick|board>game,room,walk,member|game>show,plan,boy,night,face|show>room,case,down,off,time
+case>study,law,load|study>hall,room,group|hall>way,pass,mark|way>point,side,out|point>blank,guard,break
+road>trip,map,sign,rage,block,work|trip>wire,advisor|wire>less,tap,frame|fire>wall,work,fly,place,truck,arm,side
+wall>paper,flower,street,clock|paper>work,clip,back,plane,weight,towel|work>shop,out,load,force,book,place
+shop>lifter,keeper,floor|out>door,side,line,law,look,break|door>bell,mat,knob,step,way|bell>boy,hop,tower,pepper
+boy>friend,band,scout|friend>ship,zone|ship>yard,mate,wreck|yard>stick,sale|stick>shift,man,note
+note>book,pad,worthy|book>mark,shelf,worm,case,store|mark>up,down|up>town,date,load,hill,stairs,beat
+town>house,hall,square|house>hold,work,boat,fly,keeper,plant|hold>up,out,over|over>time,night,coat,load,board,look
+night>mare,club,fall,shift,owl,light|light>house,bulb,year,weight,saber|sun>light,flower,rise,set,glasses,burn
+flower>pot,bed,shop,power|pot>hole,luck,belly,roast|hole>punch|punch>line,bag,card|line>up,backer,dance,cook
+back>pack,bone,yard,ground,fire,stage,lash|pack>age,rat|bone>marrow,yard|ground>work,hog,floor,zero,rule
+floor>plan,board|snow>ball,man,flake,storm,board,drift|ball>park,room,point,game|park>way,ranger,bench
+storm>cloud,trooper|cloud>burst,nine|rain>bow,coat,drop,forest,storm|bow>tie,man|tie>break,dye
+break>fast,down,through,water,out|fast>food,forward,lane|food>court,chain,truck,processor|court>yard,house,room,ship
+water>fall,melon,color,proof,bed,mark|fall>out,back,guy|melon>ball|fruit>cake,fly,salad,juice|cake>walk,pop
+walk>way,out,man|man>hole,power,kind,made|power>house,point,plant,nap,play|play>ground,book,house,time,boy,off,list
+list>price|price>tag,point|tag>line,team|team>work,mate,player|mate>ship|hot>dog,spot,line,air,shot,rod
+dog>house,fight,food,walker|spot>light|light>year|year>book,end|end>game,zone,point|zone>out
+cold>war,front,shoulder,case,call|war>zone,path,ship,lord|path>way,finder|finder>keeper
+black>board,mail,smith,bird,belt,hole,out|mail>box,man|box>office,car,top|office>hours,space,chair
+hours>glass|glass>house,ware|ware>house|bird>house,cage,call,seed|cage>fight
+red>head,line,wood,carpet,flag,tape|head>line,phone,light,band,quarters,ache|phone>book,call,booth
+green>house,card,light,belt,tea|tea>pot,spoon,bag,party|party>line,pooper,favor|ice>cream,cube,berg,pack,breaker
+cream>cheese,puff|cheese>cake,burger|burger>king|king>size,pin,dom,fisher|size>chart|chart>topper
+air>port,plane,line,bag,field,lock|port>hole,able|plane>load|line>man|moon>light,walk,shine,beam|walk>through
+beam>splitter|star>fish,light,dust,gate,ship|fish>bowl,hook,cake,net|bowl>cut|net>work,ball|work>around
+sea>side,shell,food,weed,horse,gull,sick|side>kick,walk,show,line|kick>start,off,back,stand|start>up,line
+shell>fish,shock|home>work,town,made,run,page,land|run>way,away,time,down|time>out,keeper
+foot>ball,print,step,note,wear|print>out|step>stool,father,mother|stool>pigeon|pigeon>hole
+hand>shake,bag,book,cuff,made,out|shake>down|bag>pipe|cuff>link|link>up|key>board,hole,chain,note,stone
+board>walk|stone>wall,age,henge|age>group|eye>ball,lash,brow,witness,sight|brow>beat
+tooth>paste,brush,pick,fairy|paste>board|brush>fire,stroke|pick>up,pocket,axe|pocket>book,watch,money
+money>bag,maker,order|order>form|form>letter|letter>box,head,man|top>hat,gun,notch,soil|hat>trick,box
+trick>shot|shot>gun,put|put>down|down>town,load,fall,hill,pour,side|hill>side,top|top>spin
+bed>room,time,bug,rock,sheet,side|room>mate|bug>spray|rock>star,band,slide,salt|band>aid,wagon,width
+slide>show|salt>water,shaker|honey>moon,comb,bee,dew|moon>shot
+bee>hive,line,sting|hive>mind|mind>set,map,game,reader|set>back,up,point,list|map>maker
+sand>box,castle,paper,storm,bag,wich,stone|castle>wall|storm>front|front>door,line,page,desk,man
+desk>top,job|job>site,market,title|title>page,track,holder|page>turner,boy
+cat>walk,fish,nap,call,food,woman|nap>time|call>center,back,girl,sign|center>piece,fold,stage|piece>work
+sign>post,board,language,off|post>card,man,mark,age,office|language>barrier
+car>pool,port,wash,park,pet,toon|pool>table,party,side|table>cloth,top,spoon,tennis|tennis>ball,court,shoe
+shoe>box,lace,string,horn,maker|lace>up|string>bean|bean>bag,sprout,stalk
+tree>house,top,line,trunk,frog|house>cat|frog>man|trunk>line|top>coat
+coat>rack,check,hanger|check>point,mate,list,out,book,up
+bank>account,note,roll,robber,teller|account>book|robber>baron
+mouse>trap,pad,hole|trap>door|pad>lock|lock>smith,down,out,box
+word>play,smith,search,press|search>engine,party,light,warrant|engine>room,oil
+oil>rig,field,spill,painting|rig>ging|field>trip,work,goal|goal>post,keeper,line
+band>stand|stand>up,by,point,still,out|still>life,water|life>boat,guard,style,line,time,span,jacket
+guard>rail,dog,house|rail>road,way|road>side
+jack>pot,knife,hammer,fruit|pot>pie|pie>chart|knife>edge|edge>wise|hammer>head
+day>light,dream,break,care,time,off,trip|dream>land,team,boat,catcher|land>mark,lord,slide,fill,scape
+lord>ship|care>giver,free,taker|free>style,fall,lance,way,dom|style>sheet
+sheet>music|music>box,video,stand,hall|video>game,call,tape|tape>worm,measure,deck
+worm>hole|in>side,door,put,come,law,form|law>suit,yer,maker,breaker|suit>case,up
+big>foot,bang,wig,top,shot,screen|bang>up|screen>shot,saver,play,time`;
+const G={};
+BANK.replace(/\n/g,"|").split("|").forEach(r=>{const[a,b]=r.trim().split(">");if(a&&b){G[a]=(G[a]||[]);b.split(",").forEach(w=>{w=w.trim();if(w&&!G[a].includes(w))G[a].push(w)})}});
+// keep only edges whose target word has onward links (except used as last word)
+const keys=Object.keys(G).filter(k=>G[k].length);
+
+const $=id=>document.getElementById(id);
+let N=6,chain=[],idx=1,hints=0,hintLen=0,penalty=0,t0=0,tick=null,skips=0,running=false;
+
+function makeChain(n){
+  for(let tries=0;tries<500;tries++){
+    let w=keys[Math.random()*keys.length|0],c=[w];
+    while(c.length<n){
+      const opts=(G[w]||[]).filter(x=>!c.includes(x)&&(c.length===n-1||(G[x]&&G[x].length)));
+      if(!opts.length)break;
+      w=opts[Math.random()*opts.length|0];c.push(w);
+    }
+    if(c.length===n)return c;
+  }
+  return ["time","machine","gun","powder","room","service"].slice(0,n);
+}
+function fmt(ms){const s=ms/1000;return Math.floor(s/60)+":"+(s%60).toFixed(1).padStart(4,"0")}
+function elapsed(){return performance.now()-t0+penalty*1000}
+function show(id){["menu","game","end"].forEach(x=>$(x).classList.toggle("hide",x!==id))}
+
+function start(){
+  chain=makeChain(N);idx=1;hints=0;skips=0;penalty=0;running=true;
+  show("game");t0=performance.now();
+  clearInterval(tick);tick=setInterval(()=>$("time").textContent=fmt(elapsed()),100);
+  setTarget();
+}
+function setTarget(){
+  hintLen=0;const g=$("g");g.value=chain[idx][0];
+  $("prog").textContent=idx+"/"+(N-1);$("hc").textContent=hints;$("msg").textContent="";
+  render();focusIn();
+}
+function focusIn(){$("g").focus({preventScroll:true})}
+function render(){
+  const el=$("chain");el.innerHTML="";
+  chain.forEach((w,i)=>{
+    if(i)el.insertAdjacentHTML("beforeend",'<div class="arrow">▼</div>');
+    const t=document.createElement("div");t.className="tile";
+    if(i===0){t.classList.add("start");t.textContent=w.toUpperCase()}
+    else if(i<idx){t.classList.add("solved");t.textContent=w.toUpperCase()}
+    else if(i===idx){
+      t.classList.add("active");t.id="active";
+      const v=$("g").value.toUpperCase();
+      for(let k=0;k<w.length;k++){
+        const b=document.createElement("div");
+        b.className="box"+(k<=hintLen?" fixed":v[k]?" on":"");
+        b.textContent=v[k]||"";t.appendChild(b);
+      }
+      t.onclick=focusIn;
+    }else{
+      t.classList.add("locked");
+      for(let k=0;k<w.length;k++){const b=document.createElement("div");b.className="box"+(k?"":" fixed");b.textContent=k?"":w[0].toUpperCase();t.appendChild(b)}
+    }
+    el.appendChild(t);
+  });
+}
+function lockPrefix(){
+  const g=$("g"),t=chain[idx],pre=t.slice(0,hintLen+1);
+  let v=g.value.toLowerCase().replace(/[^a-z]/g,"");
+  if(!v.startsWith(pre))v=pre+v.slice(pre.length>v.length?v.length:pre.length);
+  if(!v.startsWith(pre))v=pre;
+  g.value=v.slice(0,t.length);
+}
+function check(){
+  const g=$("g").value.toLowerCase(),t=chain[idx];
+  if(g.length<t.length)return;
+  if(g===t){
+    idx++;
+    if(idx>=N)return finish();
+    $("msg").textContent="✓ "+chain[idx-2].toUpperCase()+" "+t.toUpperCase();
+    const m=$("msg");m.style.color="var(--ok)";
+    setTarget();$("msg").textContent="✓ "+chain[idx-2].toUpperCase()+" "+t.toUpperCase();
+  }else{
+    const a=$("active");a.classList.remove("shake");void a.offsetWidth;a.classList.add("shake");
+    $("msg").style.color="var(--bad)";$("msg").textContent="Not quite — try again";
+  }
+}
+function finish(){
+  running=false;clearInterval(tick);
+  const ms=elapsed();$("final").textContent=fmt(ms);
+  let best=null;try{best=+localStorage.getItem("linkup_best_"+N)||null}catch(e){}
+  let note="Hints used: "+hints+" · Skips: "+skips;
+  if(!best||ms<best){note+=" · 🏆 New best!";try{localStorage.setItem("linkup_best_"+N,ms)}catch(e){}}
+  $("detail").textContent=note;
+  $("recap").innerHTML=chain.map(w=>"<span>"+w.toUpperCase()+"</span>").join('<span class="ar">→</span>');
+  show("end");loadBest();
+}
+function loadBest(){
+  let b=null;try{b=+localStorage.getItem("linkup_best_"+N)||null}catch(e){}
+  $("best").textContent=b?"Best ("+N+" words): "+fmt(b):"";
+}
+
+$("g").addEventListener("input",()=>{lockPrefix();render();check()});
+$("g").addEventListener("keydown",e=>{if(e.key==="Enter")check()});
+$("hint").onclick=()=>{
+  const t=chain[idx];if(hintLen>=t.length-2){$("msg").style.color="var(--warn)";$("msg").textContent="No more hints for this word";return}
+  hintLen++;hints++;penalty+=5;lockPrefix();
+  $("hc").textContent=hints;render();focusIn();
+};
+$("skip").onclick=()=>{
+  penalty+=20;skips++;idx++;
+  if(idx>=N)return finish();
+  setTarget();$("msg").style.color="var(--warn)";$("msg").textContent="Skipped (+20s)";
+};
+$("quit").onclick=()=>{running=false;clearInterval(tick);show("menu")};
+$("start").onclick=start;$("again").onclick=start;$("home").onclick=()=>show("menu");
+document.querySelectorAll(".lvls button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".lvls button").forEach(x=>x.classList.remove("sel"));
+  b.classList.add("sel");N=+b.dataset.n;loadBest();
+});
+document.addEventListener("click",e=>{if(running&&!e.target.closest("button"))focusIn()});
+loadBest();
+</script>
+</body>
+</html>
